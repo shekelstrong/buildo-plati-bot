@@ -88,6 +88,23 @@ CATEGORIES = {
     "GitHub Copilot": "GitHub Copilot",
     "Apple iTunes": "iTunes",
     "Notion AI": "Notion AI",
+    # Доп. ниши (06-26)
+    "Discord Nitro": "Discord Nitro",
+    "Microsoft Office": "Microsoft Office",
+    "Roblox": "Roblox",
+    "Minecraft": "Minecraft",
+    "Riot Points": "Riot Points",
+    "Valorant Points": "Valorant Points",
+    "Google Play": "Google Play",
+    "iTunes Gift Card": "iTunes Gift Card",
+    "Figma Pro": "Figma Pro",
+    "Canva Pro": "Canva Pro",
+    "ExpressVPN": "ExpressVPN",
+    "Surfshark": "Surfshark",
+    "AdGuard": "AdGuard",
+    "1Password": "1Password",
+    "Bitdefender": "Bitdefender",
+    "Kaspersky": "Kaspersky",
 }
 
 # Себестоимость для расчёта маржи
