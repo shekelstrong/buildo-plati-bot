@@ -1,0 +1,79 @@
+name: Buildo Plati Bot CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+      - name: Lint syntax
+        run: |
+          python3 -c "import ast; ast.parse(open('bot.py').read())"
+          python3 -c "import ast; ast.parse(open('parser_pw.py').read())"
+          echo "Syntax OK"
+      - name: Parser smoke test
+        env:
+          PLATEGA_MERCHANT_ID: test
+        run: python3 parser_pw.py --query "ChatGPT" --max-pages 1 || echo "Network may fail in CI"
+        continue-on-error: true
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ~/Projects/buildo-plati-bot
+            git pull origin main
+            docker compose down || true
+            docker compose build --no-cache
+            docker compose up -d
+            sleep 5
+            docker compose ps
+            echo "Deployed $(git rev-parse --short HEAD)"
+
+  hourly-parser:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Hourly parser
+        env:
+          PLATEGA_MERCHANT_ID: parser-only
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+          python3 parser_pw.py --max-pages 2
+      - name: Upload log
+        uses: actions/upload-artifact@v4
+        with:
+          name: parser-${{ github.run_id }}
+          path: /root/logs/parser.log
+          retention-days: 3
+          if-no-files-found: ignore
