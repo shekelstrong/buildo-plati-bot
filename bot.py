@@ -317,30 +317,90 @@ async def cryptobot_create_invoice(amount_usdt: float, order_id: str, descriptio
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🛒 Каталог", callback_data="catalog")],
-        [InlineKeyboardButton(text="📊 Как это работает", callback_data="how")],
+        [InlineKeyboardButton(text="🔥 Хиты продаж", callback_data="hits")],
+        [InlineKeyboardButton(text="ℹ️ Как это работает", callback_data="how")],
         [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/buildo_aibot")],
     ])
 
 
-def catalog_kb(items: list) -> InlineKeyboardMarkup:
+# Категории: код → (эмодзи, название для UI)
+CATEGORIES = {
+    "ai":       ("🤖", "AI-сервисы"),
+    "music":    ("🎵", "Музыка"),
+    "video":    ("🎬", "Видео"),
+    "social":   ("💬", "Соцсети"),
+    "gaming":   ("🎮", "Игры"),
+    "vpn":      ("🔒", "VPN"),
+    "security": ("🛡", "Безопасность"),
+    "software": ("💻", "Софт"),
+    "cards":    ("🎁", "Карты и коды"),
+}
+
+
+def categories_kb(categories_with_count: dict) -> InlineKeyboardMarkup:
+    """Главное меню каталога — кнопки категорий с количеством товаров."""
     rows = []
-    # Группируем по категориям
-    by_cat: dict = {}
-    for it in items:
-        by_cat.setdefault(it["category"], []).append(it)
-    cat_names = {"ai": "🤖 AI", "music": "🎵 Музыка", "video": "🎬 Видео", "social": "💬 Соцсети",
-                 "gaming": "🎮 Игры", "vpn": "🔒 VPN", "security": "🛡 Безопасность",
-                 "software": "💻 Софт", "cards": "🎁 Карты"}
-    for cat, cat_items in by_cat.items():
-        rows.append([InlineKeyboardButton(text=f"── {cat_names.get(cat, cat.upper())} ──", callback_data=f"noop")])
+    # Сортируем по количеству товаров (популярные сверху)
+    sorted_cats = sorted(categories_with_count.items(), key=lambda x: -x[1])
+    for code, count in sorted_cats:
+        emoji, name = CATEGORIES.get(code, ("📦", code.upper()))
+        rows.append([InlineKeyboardButton(
+            text=f"{emoji} {name} · {count} шт",
+            callback_data=f"cat:{code}"
+        )])
+    rows.append([InlineKeyboardButton(text="◀ В меню", callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def catalog_kb(items: list, category: str | None = None) -> InlineKeyboardMarkup:
+    """Каталог с фильтром по категории. Если category=None — flat список с группировкой."""
+    rows = []
+    if category:
+        # Показываем товары только этой категории
+        cat_items = [it for it in items if it["category"] == category]
+        emoji, name = CATEGORIES.get(category, ("📦", category.upper()))
+        rows.append([InlineKeyboardButton(text=f"── {emoji} {name} ──", callback_data="noop")])
         for it in cat_items:
             stock = it["stock"]
             marker = "✅" if stock > 0 else "⏳"
+            price_str = f"{it['price_rub']:,}".replace(",", " ")
             rows.append([InlineKeyboardButton(
-                text=f"{marker} {it['title']} — {it['price_rub']:,} ₽".replace(",", " "),
+                text=f"{marker} {it['title']} — {price_str} ₽",
                 callback_data=f"buy:{it['id']}",
             )])
-    rows.append([InlineKeyboardButton(text="◀ Назад", callback_data="home")])
+        rows.append([InlineKeyboardButton(text="◀ Все категории", callback_data="catalog")])
+    else:
+        # Показываем всё с группировкой (как раньше)
+        by_cat: dict = {}
+        for it in items:
+            by_cat.setdefault(it["category"], []).append(it)
+        for cat, cat_items in by_cat.items():
+            emoji, name = CATEGORIES.get(cat, ("📦", cat.upper()))
+            rows.append([InlineKeyboardButton(text=f"── {emoji} {name} ──", callback_data=f"noop")])
+            for it in cat_items:
+                stock = it["stock"]
+                marker = "✅" if stock > 0 else "⏳"
+                price_str = f"{it['price_rub']:,}".replace(",", " ")
+                rows.append([InlineKeyboardButton(
+                    text=f"{marker} {it['title']} — {price_str} ₽",
+                    callback_data=f"buy:{it['id']}",
+                )])
+        rows.append([InlineKeyboardButton(text="◀ В меню", callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def hits_kb(items: list) -> InlineKeyboardMarkup:
+    """Топ продаж — кнопки с самыми продаваемыми товарами."""
+    rows = [[InlineKeyboardButton(text="── 🔥 Хиты продаж ──", callback_data="noop")]]
+    for it in items[:10]:  # топ-10
+        stock = it["stock"]
+        marker = "✅" if stock > 0 else "⏳"
+        price_str = f"{it['price_rub']:,}".replace(",", " ")
+        rows.append([InlineKeyboardButton(
+            text=f"{marker} {it['title']} — {price_str} ₽",
+            callback_data=f"buy:{it['id']}",
+        )])
+    rows.append([InlineKeyboardButton(text="◀ В меню", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -411,8 +471,73 @@ async def cq_catalog(cq: CallbackQuery):
         await cq.answer("Каталог пуст", show_alert=True)
         return
 
-    text = f"🛒 <b>Каталог</b> · {len(items)} товаров\n\n"
-    await cq.message.edit_text(text, reply_markup=catalog_kb(items))
+    # Группируем по категориям с подсчётом товаров
+    cat_count: dict = {}
+    for it in items:
+        cat_count[it["category"]] = cat_count.get(it["category"], 0) + 1
+
+    text = (
+        f"🛒 <b>Каталог</b> · {len(items)} товаров в {len(cat_count)} категориях\n\n"
+        f"Выберите категорию:\n"
+    )
+    await cq.message.edit_text(text, reply_markup=categories_kb(cat_count))
+    await cq.answer()
+
+
+@router.callback_query(F.data.startswith("cat:"))
+async def cq_category(cq: CallbackQuery):
+    category = cq.data.split(":", 1)[1]
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT i.id, i.title, i.price_rub, i.category,
+               (SELECT COUNT(*) FROM codes c WHERE c.item_id = i.id AND c.sold_to IS NULL) AS stock
+        FROM items i
+        WHERE i.active = 1
+        ORDER BY i.price_rub
+    """)
+    items = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    cat_items = [it for it in items if it["category"] == category]
+    if not cat_items:
+        await cq.answer("В этой категории пока пусто", show_alert=True)
+        return
+
+    emoji, name = CATEGORIES.get(category, ("📦", category.upper()))
+    text = f"{emoji} <b>{name}</b> · {len(cat_items)} товаров\n\nВыберите товар:"
+    await cq.message.edit_text(text, reply_markup=catalog_kb(items, category))
+    await cq.answer()
+
+
+@router.callback_query(F.data == "hits")
+async def cq_hits(cq: CallbackQuery):
+    """Топ продаж — самые продаваемые товары."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT i.id, i.title, i.price_rub, i.category,
+               (SELECT COUNT(*) FROM codes c WHERE c.item_id = i.id AND c.sold_to IS NULL) AS stock,
+               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status = 'completed') AS sold
+        FROM items i
+        WHERE i.active = 1
+        ORDER BY sold DESC, i.price_rub
+        LIMIT 10
+    """)
+    items = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    if not items:
+        await cq.answer("Пока нет продаж", show_alert=True)
+        return
+
+    text = (
+        f"🔥 <b>Хиты продаж</b> · топ-{len(items)}\n\n"
+        f"Самые популярные товары на этой неделе. Нажмите чтобы купить:"
+    )
+    await cq.message.edit_text(text, reply_markup=hits_kb(items))
     await cq.answer()
 
 
