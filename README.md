@@ -46,3 +46,4 @@ python3 bot.py          # запуск бота + webhook сервера
 python3 parser_pw.py    # одноразовый парсинг
 python3 parser_pw.py --watch --interval 3600  # режим мониторинга
 ```# Trigger CI/CD deploy test Fri Jun 26 04:53:16 AM MSK 2026
+# CI/CD trigger with correct SSH key Fri Jun 26 05:00:16 AM MSK 2026
