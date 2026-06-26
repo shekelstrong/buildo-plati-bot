@@ -22,11 +22,13 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
-DB_PATH = "/root/data/plati_parser.db"
-LOG_PATH = "/root/logs/plati_parser.log"
+# Use env vars with sensible defaults; fall back to /tmp on CI runners (no /root access)
+import os
+_default_data = os.environ.get("PARSER_DATA_DIR") or ("/tmp/plati_parser" if os.geteuid() != 0 or not os.path.isdir("/root") else "/root/data")
+DB_PATH = os.path.join(_default_data, "plati_parser.db")
+LOG_PATH = os.path.join(_default_data, "plati_parser.log")
 
-Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
+Path(_default_data).mkdir(parents=True, exist_ok=True)
 
 
 def log(msg):

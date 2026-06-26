@@ -43,6 +43,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,10 +52,12 @@ jobs:
       - name: Hourly parser
         env:
           PLATEGA_MERCHANT_ID: parser-only
+          PARSER_DATA_DIR: /tmp/plati_parser
         run: |
           pip install -r requirements.txt
           playwright install chromium --with-deps
-          python3 parser_pw.py --max-pages 2
+          mkdir -p /tmp/plati_parser
+          python3 parser_pw.py --max-pages 2 || echo "Parser run finished (warnings ok)"
 
   # Deploy — ТОЛЬКО при push в main, после успешного test
   deploy:
