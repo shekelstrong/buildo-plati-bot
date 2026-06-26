@@ -9,6 +9,11 @@ on:
     - cron: '0 * * * *'
   workflow_dispatch:
 
+# Защита от race condition — не запускать новый workflow пока не закончится старый
+concurrency:
+  group: buildo-plati-bot-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -33,9 +38,36 @@ jobs:
         run: python3 parser_pw.py --query "ChatGPT" --max-pages 1 || echo "Network may fail in CI"
         continue-on-error: true
 
+  # Hourly parser — ТОЛЬКО по cron, не при push
+  hourly-parser:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Hourly parser
+        env:
+          PLATEGA_MERCHANT_ID: parser-only
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+          python3 parser_pw.py --max-pages 2
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parser-${{ github.run_id }}
+          path: /root/logs/parser.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+  # Deploy — ТОЛЬКО при push в main, после успешного test
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,26 +86,3 @@ jobs:
             sleep 5
             docker compose ps
             echo "Deployed $(git rev-parse --short HEAD)"
-
-  hourly-parser:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Hourly parser
-        env:
-          PLATEGA_MERCHANT_ID: parser-only
-        run: |
-          pip install -r requirements.txt
-          playwright install chromium --with-deps
-          python3 parser_pw.py --max-pages 2
-      - name: Upload log
-        uses: actions/upload-artifact@v4
-        with:
-          name: parser-${{ github.run_id }}
-          path: /root/logs/parser.log
-          retention-days: 3
-          if-no-files-found: ignore
