@@ -11,7 +11,7 @@ on:
 
 # Защита от race condition — не запускать новый workflow пока не закончится старый
 concurrency:
-  group: buildo-plati-bot-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
