@@ -55,14 +55,6 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
           python3 parser_pw.py --max-pages 2
-      - name: Upload log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parser-${{ github.run_id }}
-          path: /root/logs/parser.log
-          retention-days: 3
-          if-no-files-found: ignore
 
   # Deploy — ТОЛЬКО при push в main, после успешного test
   deploy:
