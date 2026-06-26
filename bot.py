@@ -35,7 +35,7 @@ from aiohttp import web  # pip install aiohttp — для webhook сервера
 # ===========================
 # CONFIG
 # ===========================
-load_dotenv("/root/Projects/buildo-plati-bot/.env")
+load_dotenv()  # автопоиск .env в рабочей директории контейнера (/app/)
 
 BOT_TOKEN = os.environ["BUILDO_DELIVERY_BOT_TOKEN"]
 ADMIN_IDS = [int(x) for x in os.environ.get("BUILDO_ADMIN_IDS", "6318513424").split(",") if x]
